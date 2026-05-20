@@ -8,11 +8,10 @@ import {
   Revenue,
 } from './definitions';
 import {
-  customers as placeholderCustomers,
-  invoices as placeholderInvoices,
   revenue as placeholderRevenue,
 } from './placeholder-data';
 import { formatCurrency } from './utils';
+import { getLocalCustomers, getLocalInvoices } from './local-data';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 const ITEMS_PER_PAGE = 6;
@@ -20,9 +19,9 @@ const ITEMS_PER_PAGE = 6;
 function filterPlaceholderInvoices(query: string): InvoicesTable[] {
   const normalizedQuery = query.toLowerCase();
 
-  return placeholderInvoices
-    .map((invoice, index) => {
-      const customer = placeholderCustomers.find(
+  return getLocalInvoices()
+    .map((invoice) => {
+      const customer = getLocalCustomers().find(
         (customer) => customer.id === invoice.customer_id,
       );
 
@@ -31,7 +30,7 @@ function filterPlaceholderInvoices(query: string): InvoicesTable[] {
       }
 
       return {
-        id: `${invoice.customer_id}-${invoice.date}-${index}`,
+        id: invoice.id,
         customer_id: invoice.customer_id,
         name: customer.name,
         email: customer.email,
@@ -71,16 +70,16 @@ function getPlaceholderLatestInvoices(): LatestInvoiceRaw[] {
 }
 
 function getPlaceholderCardData() {
-  const totalPaid = placeholderInvoices
+  const totalPaid = getLocalInvoices()
     .filter((invoice) => invoice.status === 'paid')
     .reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPending = placeholderInvoices
+  const totalPending = getLocalInvoices()
     .filter((invoice) => invoice.status === 'pending')
     .reduce((sum, invoice) => sum + invoice.amount, 0);
 
   return {
-    numberOfCustomers: placeholderCustomers.length,
-    numberOfInvoices: placeholderInvoices.length,
+    numberOfCustomers: getLocalCustomers().length,
+    numberOfInvoices: getLocalInvoices().length,
     totalPaidInvoices: formatCurrency(totalPaid),
     totalPendingInvoices: formatCurrency(totalPending),
   };
@@ -250,6 +249,23 @@ export async function fetchInvoicesPages(query: string) {
 }
 
 export async function fetchInvoiceById(id: string) {
+  if (!process.env.POSTGRES_URL) {
+    const invoice = filterPlaceholderInvoices('').find(
+      (invoice) => invoice.id === id,
+    );
+
+    if (!invoice) {
+      return undefined;
+    }
+
+    return {
+      id: invoice.id,
+      customer_id: invoice.customer_id,
+      amount: invoice.amount / 100,
+      status: invoice.status,
+    };
+  }
+
   try {
     const data = await sql<InvoiceForm[]>`
       SELECT
@@ -270,11 +286,20 @@ export async function fetchInvoiceById(id: string) {
     return invoice[0];
   } catch (error) {
     console.error('Database Error:', error);
-    throw new Error('Failed to fetch invoice.');
+    return undefined;
   }
 }
 
 export async function fetchCustomers() {
+  if (!process.env.POSTGRES_URL) {
+    return getLocalCustomers()
+      .map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   try {
     const customers = await sql<CustomerField[]>`
       SELECT
@@ -287,7 +312,12 @@ export async function fetchCustomers() {
     return customers;
   } catch (err) {
     console.error('Database Error:', err);
-    throw new Error('Failed to fetch all customers.');
+    return getLocalCustomers()
+      .map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 }
 
