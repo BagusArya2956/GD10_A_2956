@@ -76,8 +76,10 @@ export async function createInvoice(prevState: State, formData: FormData) {
     });
   }
 
+  revalidatePath('/', 'layout');
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/invoices');
+  revalidatePath('/dashboard/invoices/[id]', 'page');
   redirect('/dashboard/invoices');
 }
 
@@ -121,8 +123,10 @@ export async function updateInvoice(
     });
   }
 
+  revalidatePath('/', 'layout');
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/invoices');
+  revalidatePath('/dashboard/invoices/[id]', 'page');
   redirect('/dashboard/invoices');
 }
 
@@ -133,6 +137,7 @@ export async function deleteInvoice(id: string) {
     deleteLocalInvoice(id);
   }
 
+  revalidatePath('/', 'layout');
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/invoices');
 }
