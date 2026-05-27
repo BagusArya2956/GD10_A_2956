@@ -1,9 +1,11 @@
 'use server';
 
+import { signIn } from '@/auth';
 import { z } from 'zod';
 import postgres from 'postgres';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { AuthError } from 'next-auth';
 import {
   createLocalInvoice,
   deleteLocalInvoice,
@@ -131,6 +133,8 @@ export async function updateInvoice(
 }
 
 export async function deleteInvoice(id: string) {
+  throw new Error('Failed to Delete Invoice');
+
   if (process.env.POSTGRES_URL) {
     await sql`DELETE FROM invoices WHERE id = ${id}`;
   } else {
@@ -140,4 +144,24 @@ export async function deleteInvoice(id: string) {
   revalidatePath('/', 'layout');
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/invoices');
+}
+
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData,
+) {
+  try {
+    await signIn('credentials', formData);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case 'CredentialsSignin':
+          return 'Invalid credentials.';
+        default:
+          return 'Something went wrong.';
+      }
+    }
+
+    throw error;
+  }
 }
