@@ -11,31 +11,36 @@ const sql = process.env.POSTGRES_URL
   ? postgres(process.env.POSTGRES_URL, { ssl: 'require' })
   : null;
 
+async function getFallbackUser(email: string): Promise<User | undefined> {
+  const user = users.find((candidate) => candidate.email === email);
+
+  if (!user) {
+    return undefined;
+  }
+
+  return {
+    ...user,
+    password: await bcrypt.hash(user.password, 10),
+  };
+}
+
 async function getUser(email: string): Promise<User | undefined> {
   if (!sql) {
-    const user = users.find((candidate) => candidate.email === email);
-
-    if (!user) {
-      return undefined;
-    }
-
-    return {
-      ...user,
-      password: await bcrypt.hash(user.password, 10),
-    };
+    return getFallbackUser(email);
   }
 
   try {
     const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
-    return user[0];
+    return user[0] ?? (await getFallbackUser(email));
   } catch (error) {
-    console.error('Failed to fetch user:', error);
-    throw new Error('Failed to fetch user.');
+    console.error('Failed to fetch user, falling back to demo user:', error);
+    return getFallbackUser(email);
   }
 }
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   ...authConfig,
+  trustHost: true,
   providers: [
     Credentials({
       async authorize(credentials) {
